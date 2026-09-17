@@ -4,53 +4,43 @@
 
 Fuel prices affect transportation, production costs, logistics, and many parts of the wider economy. This project studies whether deep learning models can learn the time patterns behind fuel prices and use market and macroeconomic information to predict future price movements.
 
-The project was developed as a Deep Learning course project at **Hanoi University of Science and Technology**. Five different time-series architectures were explored:
-
-- Recurrent Neural Network (RNN)
-- Long Short-Term Memory (LSTM)
-- Gated Recurrent Unit (GRU)
-- LSTM + GRU hybrid
-- Attention-based / Transformer model
-
-Although the project discusses fuel and gas prices in a broad sense, the main prediction target used in the experiments is:
+The main prediction target is:
 
 ```text
 cushing_crude_oil_price
 ```
 
-The main goal is not only to train several neural networks, but also to understand how architecture choice, feature selection, lookback length, and hyperparameter tuning affect time-series forecasting performance.
+We focus on three models with clear evaluation results:
 
-[Read the full project report](Report.pdf)
+- Long Short-Term Memory (LSTM)
+- Gated Recurrent Unit (GRU)
+- Attention-based / Transformer model
+
+Our goal is not only to obtain low prediction error, but also to understand how feature selection, lookback length, model architecture, and hyperparameter tuning affect time-series forecasting performance.
+
+[Detailed project documentation](Report.pdf)
 
 ## Data
 
-The dataset combines energy, financial-market, exchange-rate, interest-rate, and inflation information. The report mainly uses data collected from the **U.S. Energy Information Administration (EIA)** and **Federal Reserve Economic Data (FRED)** because these sources provide long and consistent historical time series.
+The dataset combines energy, financial-market, exchange-rate, interest-rate, and inflation information from sources such as the **U.S. Energy Information Administration (EIA)** and **Federal Reserve Economic Data (FRED)**.
 
-The report describes a dataset covering the period from 2003 to 2025 with roughly 5.8 thousand observations. The `compiled_dataset.csv` included in this repository snapshot currently contains **5,609 rows from January 16, 2003 to May 5, 2025**, so the exact row count may differ from the report snapshot as the dataset is designed to be updated over time.
+The `compiled_dataset.csv` file contains **5,609 rows from January 16, 2003 to May 5, 2025**. It includes the crude-oil target together with variables such as the Dow Jones, Nasdaq, S&P 500, exchange rates, Federal Funds Rate, Bank Prime Loan Rate, Treasury yields, breakeven inflation rates, Henry Hub natural-gas price, and several moving-average and momentum features.
 
-The data contains the crude-oil target together with variables such as the Dow Jones, Nasdaq, S&P 500, exchange rates, Federal Funds Rate, Bank Prime Loan Rate, Treasury yields, breakeven inflation rates, Henry Hub natural-gas price, and several moving-average and momentum features.
-
-These variables were chosen because oil prices are affected by more than their own past values. Equity indices can reflect economic activity and market expectations, interest rates can describe monetary and financing conditions, exchange rates affect the purchasing power of international buyers, and inflation indicators provide information about broader price pressure.
+These variables were selected because oil prices are influenced by more than their own past values. Equity indices can reflect economic activity and market expectations, interest rates describe monetary and financing conditions, exchange rates affect the purchasing power of international buyers, and inflation indicators provide information about broader price pressure.
 
 ## Data preprocessing
 
 The raw time series contains missing values because financial markets, government statistics, and energy-price series are not always updated on the same days. Holidays and different reporting schedules can therefore create small gaps between variables.
 
-The project uses **linear interpolation** to fill these gaps instead of removing the affected rows. This keeps the timeline continuous and avoids losing large parts of the dataset. The features are then normalized with **Min-Max Scaling**, which puts variables with very different units and ranges onto a comparable scale before model training.
+We use **linear interpolation** to fill these gaps instead of removing the affected rows. This keeps the timeline continuous and avoids losing a large amount of data. The features are then normalized with **Min-Max Scaling**, which puts variables with different units and ranges onto a comparable scale before model training.
 
 The forecasting problem is converted into sequences using sliding windows. Instead of treating every day independently, the models receive information from previous time steps and learn how those values relate to the next target value.
 
-## Model architecture
+# Model architecture
 
-### 1. Recurrent Neural Network
+## 1. Long Short-Term Memory
 
-The RNN is used as the basic recurrent model. It contains two stacked recurrent layers with a hidden size of 64 and a final linear regression layer. The model uses a 30-day sequence window, Adam with a learning rate of 0.001, MSE loss, a batch size of 32, dropout of 0.2, and 50 training epochs.
-
-This model provides a simple baseline for learning temporal dependencies. It can follow short-term sequences, but standard RNNs have difficulty keeping information over long periods because gradients can vanish or explode during training.
-
-### 2. Long Short-Term Memory
-
-The LSTM model is designed to handle longer dependencies more effectively. Its hidden dimensions gradually decrease from:
+The LSTM model is designed to learn longer temporal dependencies. Its hidden dimensions decrease through the network:
 
 ```text
 128 -> 64 -> 32
@@ -58,15 +48,15 @@ The LSTM model is designed to handle longer dependencies more effectively. Its h
 
 The model uses three LSTM layers with dropout between them and a final dense regression layer. A 30-day lookback window is used. The final configuration contains **132,513 trainable parameters** and is trained with AdamW, Huber loss, a learning rate of 0.001, batch size 32, dropout 0.2, and early stopping.
 
-The decreasing hidden dimensions act like a funnel: the first layers learn a large set of temporal patterns, while later layers compress them into a smaller representation before producing the final price prediction.
+The decreasing hidden dimensions act like a funnel. The first layers learn a larger set of temporal patterns, while later layers compress that information before producing the final prediction.
 
-### 3. Gated Recurrent Unit
+## 2. Gated Recurrent Unit
 
-The GRU offers a simpler alternative to LSTM. It uses reset and update gates instead of the larger LSTM gating structure, which reduces the number of parameters while still allowing the network to keep useful information from previous time steps.
+The GRU provides a simpler recurrent structure than LSTM while still keeping useful information from previous time steps. We first tested different feature groups and then performed a large hyperparameter search over hidden size, number of GRU layers, and lookback length.
 
-An important part of the GRU experiment is that the team did not use only one fixed configuration. Different feature groups were tested first, followed by a large hyperparameter search. The final search covered hidden sizes from 8 to 256, one to five GRU layers, and lookback windows from 1 to 30 days, for a reported total of **490 experiments**.
+The search covered hidden sizes from 8 to 256, one to five GRU layers, and lookback windows from 1 to 30 days, for a total of **490 experiments**.
 
-The final configuration found by this process used:
+The final GRU configuration was:
 
 ```text
 hidden size = 32
@@ -77,57 +67,30 @@ learning rate = 0.007586
 
 The learning rate was selected with an LR Finder.
 
-### 4. LSTM + GRU hybrid
+## 3. Attention-based model
 
-The hybrid architecture is one of the more interesting parts of the project. Instead of simply stacking an LSTM and GRU, the model uses the LSTM as an encoder and transfers its learned memory into a GRU decoder.
+The attention-based model uses Transformer encoder blocks to learn relationships across the input sequence. The model contains two Transformer encoders followed by an output layer that maps the final sequence representation to one predicted value.
 
-The LSTM first learns long-term temporal information. Its final cell state is passed through a fully connected transformation and a `tanh` activation so that it can initialize the hidden state of the GRU. At the same time, the sequence of LSTM hidden states is passed to the GRU as its input sequence.
+Each attention block uses four heads with a model dimension of 64. The feed-forward layer uses 128 dimensions, and dropout is set to 0.2. The model is trained with Adam and uses callbacks to reduce the learning rate when performance stops improving and to stop training when no further improvement is found.
 
-In simple terms, the model tries to let the LSTM answer:
-
-> What long-term information should be remembered?
-
-and then lets the GRU use that information to refine the final prediction.
-
-The reported hybrid model contains **148,225 parameters**. It uses dropout of 0.1, Adam with a learning rate of 0.001, MAE loss, early stopping, and a batch size of 15. The report experiments with both daily and weekly forecasting, using 5-day and 20-day lookback windows.
-
-### 5. Attention-based model
-
-The final architecture uses the attention mechanism through Transformer encoder blocks. The model contains two Transformer encoders followed by a simple output stage that selects the final time step and maps it to one predicted value.
-
-Each attention block uses four heads with a model dimension of 64. The feed-forward layer uses 128 dimensions, and dropout is set to 0.2. The model is trained with Adam and includes callbacks that reduce the learning rate when performance stops improving and stop training when no further improvement is found.
-
-The appendix also studies larger and smaller Transformer configurations. Increasing the number of layers or dimensions can produce a tighter fit, but it also makes training more expensive. The final two-encoder design was kept as a practical balance between model capacity and computational cost.
+We also tested smaller and larger Transformer configurations. Smaller models tended to smooth too much information, while larger models could fit the data more closely but required more computation. The two-encoder design provided a practical balance between model capacity and training cost.
 
 # Results
 
-The report does not provide exactly the same set of metrics for every model, so the values below should be read as the **reported results of each experiment**, rather than as a perfectly controlled leaderboard.
+## 1. LSTM performance
 
-| Model | MAE | RMSE | R² | Notes |
-|---|---:|---:|---:|---|
-| RNN | — | — | — | Quantitative metrics are not stated in the report |
-| LSTM - Train | 0.0275 | 0.0404 | 0.9867 | Strong fit on training data |
-| LSTM - Test | 0.0541 | 0.0643 | 0.8199 | Lower performance than train, but still follows the main trend |
-| GRU - Final tuned model | **0.018011** | **0.024176** | **0.981945** | Result after feature selection and 490 hyperparameter experiments |
-| LSTM + GRU | — | — | — | Reported mainly through daily and weekly prediction plots |
-| Attention - Test | — | **0.0233** | — | Captures the main trend but smooths some large peaks |
-| Attention - Train | — | 0.03255 | — | Reported training RMSE |
+| Split | MAE | RMSE | R² |
+|---|---:|---:|---:|
+| Train | 0.0275 | 0.0404 | 0.9867 |
+| Test | 0.0541 | 0.0643 | 0.8199 |
 
-## RNN result
+The LSTM learned the training sequence very well and still kept useful prediction ability on unseen data. However, there is a clear gap between training and testing performance. Test MAE is almost twice the training MAE, while R² decreases from 0.9867 to 0.8199.
 
-The RNN prediction follows much of the long-term movement of the crude-oil series, which shows that even a basic recurrent network can learn useful time structure. However, the plot also shows larger errors around sudden and extreme movements. The model follows normal trends more easily than rare shocks, which is a common limitation of simple recurrent models.
+The model follows the main price trend, but short-term peaks and rapid movements are harder to reproduce. This suggests that the LSTM captures the overall temporal structure well, but its ability to generalize to unseen periods is weaker than its training fit.
 
-The report does not provide MAE, RMSE, or R² values for the RNN result, so it is better to treat the RNN as a visual baseline rather than make a numerical comparison that the report does not support.
+## 2. GRU feature-selection experiments
 
-## LSTM result
-
-The LSTM achieved a training MAE of **0.0275**, RMSE of **0.0404**, and R² of **0.9867**. On the test set, MAE increased to **0.0541**, RMSE increased to **0.0643**, and R² decreased to **0.8199**.
-
-This shows that the LSTM learned the training sequence very well and still kept useful prediction ability on unseen data, but there is a clear gap between training and testing performance. The test prediction follows the general price movement, while some short-term peaks and rapid changes are harder to reproduce. In other words, the LSTM captures the overall temporal structure, but its generalization is weaker than its training fit.
-
-## GRU feature-selection experiments
-
-Feature selection had a large effect on the GRU model. The first experiment used only features with high same-day correlation to the target and obtained:
+Feature selection had a large effect on GRU performance.
 
 | Feature setup | MAE | RMSE | R² |
 |---|---:|---:|---:|
@@ -135,13 +98,15 @@ Feature selection had a large effect on the GRU model. The first experiment used
 | All features with positive correlation | 0.0338 | 0.0432 | 0.9385 |
 | Selected macro/market feature group | 0.0337 | **0.0415** | **0.9433** |
 
-Simply adding more positively correlated variables did not improve the model. This is an important result because same-day correlation does not necessarily tell us which features are useful across time. A variable can have a weak same-day relationship with oil price but still provide useful information about the future when it is combined with previous time steps.
+Using every positively correlated feature did not improve the model. In fact, the result became slightly worse. This shows that adding more variables does not automatically produce better forecasts.
 
-The final feature group focused on major equity indices and macroeconomic variables, including the Dow Jones, Nasdaq, S&P 500, USD exchange rate, Treasury rate, breakeven inflation, Bank Prime Loan Rate, and Federal Funds Rate. The report argues that these variables give the model a broader view of economic demand, liquidity, monetary conditions, inflation, and currency movements.
+The selected feature group focused on major equity indices and macroeconomic variables, including the Dow Jones, Nasdaq, S&P 500, USD exchange rate, Treasury rate, breakeven inflation, Bank Prime Loan Rate, and Federal Funds Rate. Together, these features give the model information about economic demand, liquidity, monetary conditions, inflation, and currency movements.
 
-## GRU hyperparameter tuning
+The key point is that same-day correlation is not enough to decide whether a feature is useful for time-series forecasting. A variable can have a weak direct correlation with oil price but still provide useful information when combined with previous time steps.
 
-After choosing the feature group, the project performed **490 hyperparameter experiments**. The final tuned GRU reached:
+## 3. GRU hyperparameter tuning
+
+After feature selection, we performed **490 hyperparameter experiments**. The final tuned GRU achieved:
 
 ```text
 MAE  = 0.018011
@@ -149,49 +114,46 @@ RMSE = 0.024176
 R²   = 0.981945
 ```
 
-Compared with the selected feature group before final tuning, MAE fell from 0.0337 to 0.018011, which is about a **46.6% reduction**. RMSE fell from 0.0415 to 0.024176, a reduction of about **41.7%**.
+Compared with the selected feature setup before final tuning, MAE decreased from 0.0337 to 0.018011, which is about a **46.6% reduction**. RMSE decreased from 0.0415 to 0.024176, which is about a **41.7% reduction**.
 
-This improvement shows that the strong GRU result did not come from architecture choice alone. Feature selection, hidden size, number of layers, lookback length, and learning rate all had an important effect on the final performance.
+This is one of the clearest results in the project. The improvement shows that architecture choice alone is not enough. Hidden size, number of layers, lookback length, learning rate, and feature selection all have a strong effect on final performance.
 
-Another interesting result is that the best GRU lookback was only **one day**. The report interprets this as evidence that the most recent oil-price information provides a strong short-term signal, while the selected macroeconomic variables give extra context that helps adjust the prediction.
+Another interesting result is that the best GRU lookback was only **one day**. This suggests that the most recent oil-price information carries a strong short-term signal, while the macroeconomic variables provide additional context for the prediction.
 
-## LSTM + GRU hybrid result
+## 4. Attention-based model
 
-The hybrid model fits the training data closely and follows both gradual trends and many short-term movements. The test result is more mixed. According to the report, predictions track the ground truth well during the earlier part of the test set, but after roughly index 500 the model increasingly underestimates the true values. The difference becomes clearer in the later part of the sequence.
+| Split | RMSE |
+|---|---:|
+| Train | 0.03255 |
+| Test | **0.0233** |
 
-This suggests that the hybrid architecture is capable of learning the temporal structure, but its errors can grow over a long test period. The report points to possible cumulative error or overfitting as areas that need further investigation. The project also experiments with weekly prediction, showing that the same LSTM-to-GRU memory-transfer idea can be applied at a different forecasting frequency.
+The attention-based model follows the main direction of the target series well, especially during moderate price movements. Its main weakness is that some of the largest peaks are smoothed rather than fully reproduced.
 
-Because the Results section does not provide one final MAE, RMSE, and R² summary for this model, the README keeps the hybrid result qualitative rather than inventing a direct numerical comparison.
-
-## Attention-based model result
-
-The attention-based model reports an RMSE of **0.0233 on the test set** and **0.03255 on the training set**. Its prediction follows the main direction of the target series well, especially through moderate price movements.
-
-The main weakness visible in the result is that attention tends to smooth some of the highest peaks. In other words, it learns the overall shape of the time series more easily than rare extreme values.
-
-The appendix supports this interpretation. A smaller model with reduced dimensions underfits and smooths too much information, while a much larger model can produce a tighter fit but costs more to train. Increasing the number of encoder layers can also improve fitting, but the authors chose two encoders because the extra computational cost of the deeper versions was not considered worthwhile for this dataset.
+The architecture experiments also show a clear trade-off between model size and efficiency. Smaller Transformer configurations lose too much information and underfit, while larger versions can fit the data more closely but require more computation. The two-encoder model keeps enough capacity to learn the main sequence pattern without making the architecture unnecessarily large.
 
 # What the results tell us
 
-The experiments show that architecture matters, but **model tuning and feature design matter just as much**. GRU performance improved strongly after the feature group and hyperparameters were changed, while using a larger set of simply correlated variables did not automatically improve forecasting.
+The experiments show that **feature design and model tuning are just as important as model architecture**. The GRU provides the clearest example: changing the feature set alone affected performance, and the final tuning stage reduced MAE by about 46.6% compared with the selected pre-tuning setup.
 
-The results also show that different architectures fail in different ways. The RNN has difficulty with extreme movements, the LSTM shows a noticeable train-test gap, the hybrid model begins to drift during the later test period, and the attention model tends to smooth large peaks. These differences are useful because they show that a low error score alone does not explain how a model behaves across different market conditions.
+The results also show that simply using more input variables is not always helpful. The GRU experiment with all positively correlated features performed worse than a smaller, more carefully selected macroeconomic feature group. This suggests that useful forecasting information depends on how variables interact through time, not only on their direct correlation with the target.
 
-The GRU experiment gives the clearest quantitative example of successful tuning, while the hybrid model provides the most custom architectural idea in the project. The attention experiments add another useful perspective by showing the trade-off between model size, fitting ability, and computational cost.
+The LSTM results show strong learning ability but also a clear train-test gap. The attention model follows the overall trend well but smooths some extreme movements. The tuned GRU achieves the strongest complete set of MAE, RMSE, and R² results in the current experiments.
 
 # Project contribution
 
-The main contribution of this project is the comparison of several deep learning approaches on one real-world fuel-price forecasting problem. Instead of using only historical oil prices, the project builds a broader dataset that includes financial markets, monetary variables, exchange rates, and inflation information.
+This project builds a deep learning pipeline for crude-oil price forecasting using both historical energy prices and broader financial and macroeconomic information. Instead of using only past oil prices, we combine market indices, exchange rates, interest rates, inflation indicators, and other time-series variables to give the models more economic context.
 
-The work also goes beyond simply training five default neural networks. It includes missing-value treatment, normalization, sequence construction, feature-selection experiments, a large GRU hyperparameter search, a custom LSTM-to-GRU state-transfer architecture, Transformer-size experiments, daily forecasting, and weekly forecasting.
+A major part of the project is the experimental process. We compare different recurrent and attention-based approaches, test different feature groups, perform a large GRU hyperparameter search, use sequence-based preprocessing, and study how Transformer size affects forecasting behavior.
 
-From a learning and research perspective, the project demonstrates three main ideas: financial time-series forecasting depends heavily on good preprocessing, more features do not always produce a better model, and more complex architectures are only useful when their extra capacity produces enough improvement to justify their cost.
+The project highlights several practical lessons for financial time-series modeling. More features do not always improve performance, the best lookback window can be surprisingly short, strong training performance does not guarantee equally strong test performance, and larger neural networks are only useful when the extra complexity produces enough improvement to justify the computational cost.
 
 # Limitations
 
-There are several limitations to keep in mind when reading the results. The project uses U.S. data because equivalent Vietnamese data was not available with enough history and detail. The report also does not present the same metrics and exactly the same experimental setup for all five architectures, so the reported values should not be treated as a strict apples-to-apples ranking without further controlled testing.
+The project uses U.S. data because long and detailed fuel-price and macroeconomic time series are more readily available. This means the results should not be directly treated as a model of the Vietnamese fuel market.
 
-Sudden market shocks remain difficult for several models, and the hybrid and attention results show that a model can follow the general trend while still missing extreme values or slowly drifting away from the target. Future work could use one fixed train/validation/test split for every architecture, report the same MAE/RMSE/R² metrics for all models, and repeat experiments across multiple random seeds.
+The three evaluated architectures also use different experiment settings, so their metrics should be interpreted in the context of each model rather than as a perfectly controlled leaderboard. A stronger future comparison would use one fixed train/validation/test split, the same input feature set, the same evaluation metrics, and repeated runs across multiple random seeds.
+
+Sudden market shocks also remain difficult to predict. Both recurrent and attention-based models can follow the overall price trend while still missing short, extreme movements. Future work could focus more directly on these high-volatility periods.
 
 # Repository structure
 
@@ -213,24 +175,32 @@ Sudden market shocks remain difficult for several models, and the hybrid and att
     └── Transformer.keras
 ```
 
-`compiled_dataset.csv` contains the combined modeling dataset. `gru.ipynb` and `gru.py` contain the GRU experiments, while `main.ipynb` contains additional data-processing and model experiments. The `model/` folder stores exported model files.
+`compiled_dataset.csv` contains the combined modeling dataset. `gru.ipynb` and `gru.py` contain the GRU feature-selection and tuning experiments, while `main.ipynb` contains additional data-processing and model experiments. The `model/` folder stores exported model files.
 
 # How to run
 
-This repository does not currently include a pinned `requirements.txt`. The main libraries used by the code are:
-
-```bash
-pip install pandas numpy matplotlib seaborn scikit-learn torch tensorflow keras yfinance fredapi
-```
-
-Then open the notebooks and run the required experiment:
+The project requires the following main libraries:
 
 ```text
-gru.ipynb   -> GRU experiments and feature selection
-main.ipynb  -> additional data collection / model experiments
+pandas
+numpy
+matplotlib
+seaborn
+scikit-learn
+torch
+tensorflow
+keras
+yfinance
+fredapi
 ```
 
-If the data-collection cells are used, configure your own API credentials before running them.
+To run the project, open:
+
+```text
+main.ipynb
+```
+
+and execute the notebook from top to bottom.
 
 # Team
 
@@ -244,6 +214,6 @@ This project was developed by:
 
 Hanoi University of Science and Technology
 
-## Final note
+# Final note
 
-This project is a forecasting experiment and a Deep Learning course project. It shows that recurrent and attention-based models can learn useful structure from crude-oil and macroeconomic time series, but the reported results should be interpreted together with the model-specific evaluation setup and the limitations above.
+This project shows that deep learning can learn useful structure from crude-oil and macroeconomic time series, but good forecasting performance depends heavily on feature selection, sequence design, and model tuning. The strongest results come from careful experimentation rather than simply choosing a more complex neural network.
