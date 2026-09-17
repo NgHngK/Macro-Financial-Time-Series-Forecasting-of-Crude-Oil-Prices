@@ -39,29 +39,3 @@ The GRU model achieved very good results after feature selection and hyperparame
 
 The LSTM + GRU hybrid model worked well on the training data, but its predictions became less accurate in some later parts of the test data.
 
-## What We Learned
-
-Through this project, we learned more about:
-
-- Time-series forecasting
-- Data preprocessing
-- RNN, LSTM, and GRU
-- Attention mechanism
-- Feature selection
-- Hyperparameter tuning
-- Comparing deep learning models
-
-This project helped us understand how the deep learning concepts from class can be applied to a real-world prediction problem.
-
-## Tools
-
-- Python
-- PyTorch
-- Keras / TensorFlow
-- Pandas
-- NumPy
-- Matplotlib
-
-## Team
-
-This project was made by students from Hanoi University of Science and Technology as part of our Deep Learning coursework.
